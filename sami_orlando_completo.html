@@ -1,0 +1,1917 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sami Orlando - Sistema Integral de Rastreo GPS y Locución Vocal (Cusco ⇄ Anta)</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Rajdhani:wght@600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Socket.IO Client con Fallback CDN -->
+    <script src="/socket.io/socket.io.js" onerror="this.onerror=null;this.src='https://cdn.socket.io/4.7.2/socket.io.min.js';"></script>
+
+    <style>
+        :root {
+            --bg-deep: #080d1a;
+            --bg-card: rgba(15, 23, 42, 0.88);
+            --bg-surface: #0b1120;
+            --border-glass: rgba(255, 255, 255, 0.08);
+            --border-glow: rgba(6, 182, 212, 0.35);
+            --accent-cyan: #06b6d4;
+            --accent-blue: #3b82f6;
+            --accent-emerald: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --accent-purple: #8b5cf6;
+            --text-main: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: var(--bg-deep);
+            color: var(--text-main);
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ============================================== */
+        /* BARRA SUPERIOR GLOBAL Y SELECTOR DE VISTAS     */
+        /* ============================================== */
+        .global-navbar {
+            background: rgba(11, 17, 32, 0.94);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-glass);
+            padding: 10px 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 9999;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .global-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 50%, #10b981 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            box-shadow: 0 0 16px rgba(6, 182, 212, 0.45);
+        }
+
+        .brand-text h1 {
+            font-size: 16px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            background: linear-gradient(90deg, #ffffff 0%, #a5f3fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            line-height: 1.2;
+        }
+
+        .brand-text p {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: 'Rajdhani', monospace;
+            font-weight: 600;
+        }
+
+        .view-switcher-buttons {
+            display: flex;
+            gap: 8px;
+            background: rgba(15, 23, 42, 0.85);
+            padding: 4px;
+            border-radius: 12px;
+            border: 1px solid var(--border-glass);
+        }
+
+        .switch-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 700;
+            font-family: inherit;
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .switch-btn:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .switch-btn.active {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            color: white;
+            box-shadow: 0 0 12px rgba(2, 132, 199, 0.45);
+        }
+
+        .system-status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 8px #10b981;
+            animation: pulseDot 2s infinite;
+        }
+
+        @keyframes pulseDot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.85); }
+        }
+
+        /* ============================================== */
+        /* CONTENEDORES DE LAS VISTAS PRINCIPALES         */
+        /* ============================================== */
+        .app-view {
+            display: none;
+            flex: 1;
+            width: 100%;
+        }
+
+        .app-view.active-view {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ============================================== */
+        /* VISTA 1: LOGIN / ACCESO AL SISTEMA             */
+        /* ============================================== */
+        #view-login {
+            align-items: center;
+            justify-content: center;
+            padding: 30px 20px;
+            min-height: calc(100vh - 70px);
+            background: radial-gradient(circle at 50% 20%, #1e3a8a 0%, #0b1120 40%, #050811 100%);
+        }
+
+        .login-card-wrapper {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border-glow);
+            border-radius: 20px;
+            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 35px rgba(6, 182, 212, 0.15);
+            max-width: 440px;
+            width: 100%;
+            overflow: hidden;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .login-card-header {
+            padding: 30px 24px 20px;
+            text-align: center;
+            border-bottom: 1px solid var(--border-glass);
+        }
+
+        .login-card-body {
+            padding: 24px;
+        }
+
+        .login-role-tabs {
+            display: flex;
+            background: rgba(11, 17, 32, 0.7);
+            border-radius: 12px;
+            padding: 4px;
+            margin-bottom: 22px;
+            border: 1px solid var(--border-glass);
+        }
+
+        .role-tab-btn {
+            flex: 1;
+            padding: 10px;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 700;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+
+        .role-tab-btn.active {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        .form-input {
+            width: 100%;
+            background: rgba(11, 17, 32, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 12px 14px;
+            color: white;
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .form-input:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 10px rgba(6, 182, 212, 0.35);
+        }
+
+        .btn-submit-action {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #0284c7 0%, #059669 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 800;
+            font-family: inherit;
+            cursor: pointer;
+            box-shadow: 0 8px 24px rgba(2, 132, 199, 0.4);
+            transition: all 0.25s ease;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-submit-action:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(2, 132, 199, 0.6);
+        }
+
+        /* ============================================== */
+        /* VISTA 2: PANEL DE ADMINISTRADOR                */
+        /* ============================================== */
+        #view-admin {
+            padding: 18px 22px;
+            max-width: 1700px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .admin-nav-tabs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+            background: rgba(15, 23, 42, 0.7);
+            padding: 6px;
+            border-radius: 14px;
+            border: 1px solid var(--border-glass);
+        }
+
+        .admin-tab-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 700;
+            font-family: inherit;
+            padding: 10px 18px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .admin-tab-btn:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .admin-tab-btn.active {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            color: white;
+            box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);
+        }
+
+        .admin-section {
+            display: none;
+        }
+
+        .admin-section.active-section {
+            display: block;
+        }
+
+        .glass-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            margin-bottom: 18px;
+        }
+
+        .card-header-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            padding-bottom: 14px;
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 17px;
+            font-weight: 800;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+
+        /* Mapa Admin */
+        .admin-map-container {
+            width: 100%;
+            height: 600px;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid var(--border-glow);
+            position: relative;
+        }
+
+        #admin-map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Tabla estilizada */
+        .custom-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            text-align: left;
+        }
+
+        .custom-table th {
+            background: rgba(11, 17, 32, 0.85);
+            color: #94a3b8;
+            font-weight: 700;
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            text-transform: uppercase;
+            font-size: 11px;
+        }
+
+        .custom-table td {
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            color: var(--text-secondary);
+        }
+
+        .custom-table tr:hover td {
+            background: rgba(255, 255, 255, 0.03);
+            color: white;
+        }
+
+        .status-pill-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 14px;
+        }
+
+        .pill-emerald {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .pill-cyan {
+            background: rgba(6, 182, 212, 0.15);
+            color: #38bdf8;
+            border: 1px solid rgba(6, 182, 212, 0.3);
+        }
+
+        .pill-amber {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .btn {
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-cyan { background: #0284c7; color: white; }
+        .btn-cyan:hover { background: #0369a1; }
+        .btn-emerald { background: #059669; color: white; }
+        .btn-emerald:hover { background: #047857; }
+        .btn-rose { background: #e11d48; color: white; }
+        .btn-rose:hover { background: #be123c; }
+        .btn-glass { background: rgba(255, 255, 255, 0.08); color: white; border: 1px solid rgba(255, 255, 255, 0.15); }
+        .btn-glass:hover { background: rgba(255, 255, 255, 0.15); }
+
+        /* ============================================== */
+        /* VISTA 3: CONSOLA CHOFER (GPS 2D Y ANUNCIADOR)  */
+        /* ============================================== */
+        #view-chofer {
+            position: relative;
+            height: calc(100vh - 70px);
+            overflow: hidden;
+            display: none;
+        }
+
+        #view-chofer.active-view {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Banner Desbloqueo Audio Móvil */
+        .audio-unlock-banner {
+            background: linear-gradient(90deg, #059669 0%, #10b981 100%);
+            color: white;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+            z-index: 1000;
+        }
+
+        /* Mapa Chofer */
+        .chofer-map-viewport {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        #chofer-map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* HUD Superior del Chofer */
+        .chofer-hud-overlay {
+            position: absolute;
+            top: 14px;
+            left: 14px;
+            right: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+            z-index: 800;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .hud-glass-pill {
+            background: rgba(11, 17, 32, 0.9);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 14px;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            pointer-events: auto;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .hud-speed-gauge {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 28px;
+            font-weight: 800;
+            color: #34d399;
+            line-height: 1;
+        }
+
+        .hud-speed-unit {
+            font-size: 12px;
+            color: #94a3b8;
+            font-weight: 700;
+        }
+
+        .hud-lane-badge {
+            font-size: 12px;
+            font-weight: 800;
+            padding: 4px 10px;
+            border-radius: 8px;
+            background: rgba(6, 182, 212, 0.2);
+            color: #38bdf8;
+            border: 1px solid rgba(6, 182, 212, 0.4);
+        }
+
+        /* Banner de Paradero Entrante en Cabina */
+        .stop-announcement-banner {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.96);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 2px solid #10b981;
+            border-radius: 16px;
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(16, 185, 129, 0.35);
+            z-index: 850;
+            max-width: 650px;
+            width: 90%;
+            animation: bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes bounceIn {
+            from { opacity: 0; transform: translate(-50%, 20px) scale(0.95); }
+            to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+        }
+
+        /* Modal Hoja de Ruta / Historial del Chofer */
+        .chofer-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(3, 7, 18, 0.82);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            z-index: 10000;
+        }
+
+        .chofer-modal-card {
+            background: rgba(15, 23, 42, 0.98);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 18px;
+            padding: 22px;
+            max-width: 520px;
+            width: 100%;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.85);
+        }
+
+        /* Notificaciones Toast */
+        .toast-popup {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid var(--accent-cyan);
+            color: white;
+            padding: 12px 18px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.7);
+            z-index: 11000;
+            display: none;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(30px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ============================================== -->
+    <!-- BARRA SUPERIOR GLOBAL                          -->
+    <!-- ============================================== -->
+    <header class="global-navbar">
+        <div class="global-brand">
+            <div class="brand-logo-icon">🚍</div>
+            <div class="brand-text">
+                <h1>Sami Orlando</h1>
+                <p>CORREDOR CUSCO ⇄ IZCUCHACA ⇄ ANTA (PE-3S)</p>
+            </div>
+        </div>
+
+        <!-- Selector de Pantallas Integrado -->
+        <div class="view-switcher-buttons">
+            <button type="button" class="switch-btn active" id="btn-view-login" onclick="cambiarVistaGlobal('login')">
+                🔑 Acceso
+            </button>
+            <button type="button" class="switch-btn" id="btn-view-admin" onclick="cambiarVistaGlobal('admin')">
+                🛡️ Administrador
+            </button>
+            <button type="button" class="switch-btn" id="btn-view-chofer" onclick="cambiarVistaGlobal('chofer')">
+                📱 Modo Chofer GPS
+            </button>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="system-status-indicator" id="global-status-indicator">
+                <span class="status-dot"></span>
+                <span id="global-status-text">Sistema Listo ✅</span>
+            </div>
+            <button type="button" class="btn btn-glass" onclick="togglePantallaCompleta()" title="Pantalla Completa">
+                ⛶
+            </button>
+        </div>
+    </header>
+
+    <!-- Notificación Toast Flotante -->
+    <div id="toast-notif" class="toast-popup"></div>
+
+    <!-- ============================================== -->
+    <!-- VISTA 1: ACCESO / LOGIN                        -->
+    <!-- ============================================== -->
+    <main id="view-login" class="app-view active-view">
+        <div class="login-card-wrapper">
+            <div class="login-card-header">
+                <div style="font-size: 32px; margin-bottom: 6px;">🚍</div>
+                <h2 style="font-size: 20px; font-weight: 800; color: white;">Portal Sami Orlando</h2>
+                <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">Selecciona tu rol para ingresar al sistema de rastreo</p>
+            </div>
+
+            <div class="login-card-body">
+                <div class="login-role-tabs">
+                    <button type="button" class="role-tab-btn active" id="tab-btn-admin-role" onclick="seleccionarRolLogin('admin')">
+                        🛡️ Administrador
+                    </button>
+                    <button type="button" class="role-tab-btn" id="tab-btn-chofer-role" onclick="seleccionarRolLogin('chofer')">
+                        🚍 Chofer / Unidad
+                    </button>
+                </div>
+
+                <!-- Formulario Admin -->
+                <form id="form-login-admin" onsubmit="procesarLoginAdmin(event)">
+                    <div class="form-group">
+                        <label>Usuario</label>
+                        <input type="text" id="admin-user-input" class="form-input" placeholder="admin" required autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label>Contraseña</label>
+                        <input type="password" id="admin-pass-input" class="form-input" placeholder="••••••••" required autocomplete="current-password">
+                    </div>
+                    <button type="submit" class="btn-submit-action">
+                        🔑 Ingresar como Administrador
+                    </button>
+                </form>
+
+                <!-- Formulario Chofer -->
+                <form id="form-login-chofer" style="display: none;" onsubmit="procesarLoginChofer(event)">
+                    <div class="form-group">
+                        <label>Código de Unidad o Padrón</label>
+                        <input type="text" id="chofer-codigo-input" class="form-input" placeholder="Ej: U-01, BUS-12" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Sentido Inicial de Recorrido</label>
+                        <select id="chofer-sentido-input" class="form-input">
+                            <option value="bajada">⬇️ Bajada (Anta Izcuchaca ➔ Cusco)</option>
+                            <option value="subida">⬆️ Subida (Cusco ➔ Anta Izcuchaca)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-submit-action" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%);">
+                        🚍 Iniciar Recorrido Chofer
+                    </button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <!-- ============================================== -->
+    <!-- VISTA 2: PANEL DE ADMINISTRADOR                -->
+    <!-- ============================================== -->
+    <main id="view-admin" class="app-view">
+        <!-- Pestañas del Panel Admin -->
+        <nav class="admin-nav-tabs">
+            <button type="button" class="admin-tab-btn active" onclick="cambiarTabAdmin('mapa', event)">
+                🗺️ Monitoreo en Vivo
+            </button>
+            <button type="button" class="admin-tab-btn" onclick="cambiarTabAdmin('historial', event)">
+                📜 Historial de Ruta y Tiempos
+            </button>
+            <button type="button" class="admin-tab-btn" onclick="cambiarTabAdmin('paraderos', event)">
+                🚏 Red de Paraderos (24)
+            </button>
+            <button type="button" class="admin-tab-btn" onclick="cambiarTabAdmin('unidades', event)">
+                🚍 Flota y Vehículos
+            </button>
+            <button type="button" class="admin-tab-btn" onclick="cambiarTabAdmin('voz', event)">
+                🔊 Configuración de Voz
+            </button>
+        </nav>
+
+        <!-- SUB-TAB 1: MAPA MONITOREO EN VIVO -->
+        <section id="admin-sec-mapa" class="admin-section active-section">
+            <div class="glass-card" style="padding: 14px;">
+                <div class="card-header-line" style="margin-bottom: 12px;">
+                    <div>
+                        <h2 class="card-title">🗺️ Mapa Satelital 2D - Flota y Paraderos Cusco ⇄ Anta</h2>
+                        <p class="card-subtitle">Seguimiento en vivo, detección automática de paraderos a 120-150m y telemetría de carretera PE-3S</p>
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-cyan" onclick="centrarMapaAdminRuta()">
+                            🎯 Centrar Corredor PE-3S
+                        </button>
+                        <button type="button" class="btn btn-emerald" onclick="iniciarSimuladorFlota()">
+                            🎮 Simular Avance de Bus
+                        </button>
+                        <button type="button" class="btn btn-glass" onclick="lanzarAlertaTraficoModal()">
+                            ⚠️ Enviar Alerta de Tráfico
+                        </button>
+                    </div>
+                </div>
+
+                <div class="admin-map-container">
+                    <div id="admin-map"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SUB-TAB 2: HISTORIAL DE RUTA Y TIEMPOS DE PARADEROS -->
+        <section id="admin-sec-historial" class="admin-section">
+            <div class="glass-card">
+                <div class="card-header-line">
+                    <div>
+                        <h2 class="card-title">📜 Historial de Recorridos y Tarjeta de Control</h2>
+                        <p class="card-subtitle">Registro cronológico de vueltas en la ruta Cusco ⇄ Izcuchaca ⇄ Anta con tiempos de paso en cada paradero</p>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="btn btn-cyan" onclick="cargarHistorialViajes()">
+                            🔄 Actualizar
+                        </button>
+                        <button type="button" class="btn btn-emerald" onclick="imprimirReporteConsolidado()">
+                            🖨️ Imprimir Reporte Diario
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filtros -->
+                <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+                    <select id="filtro-historial-unidad" onchange="renderizarHistorialAdmin()" class="form-input" style="max-width: 220px;">
+                        <option value="todos">🚍 Todas las Unidades</option>
+                    </select>
+                    <select id="filtro-historial-sentido" onchange="renderizarHistorialAdmin()" class="form-input" style="max-width: 260px;">
+                        <option value="todos">🔄 Ambos Sentidos (Subida y Bajada)</option>
+                        <option value="bajada">⬇️ Bajada (Anta Izcuchaca ➔ Cusco)</option>
+                        <option value="subida">⬆️ Subida (Cusco ➔ Anta Izcuchaca)</option>
+                    </select>
+                </div>
+
+                <div id="historial-viajes-lista" style="display: flex; flex-direction: column; gap: 14px;">
+                    <!-- Tarjetas de Viaje inyectadas dinámicamente -->
+                </div>
+            </div>
+        </section>
+
+        <!-- SUB-TAB 3: RED DE PARADEROS -->
+        <section id="admin-sec-paraderos" class="admin-section">
+            <div class="glass-card">
+                <div class="card-header-line">
+                    <div>
+                        <h2 class="card-title">🚏 Red Oficial de Paraderos (Anta Izcuchaca ⇄ Cusco)</h2>
+                        <p class="card-subtitle">24 Paraderos georreferenciados con detección de proximidad y voz automática</p>
+                    </div>
+                    <button type="button" class="btn btn-emerald" onclick="abrirModalNuevoParadero()">
+                        ➕ Nuevo Paradero
+                    </button>
+                </div>
+
+                <div class="table-responsive" style="overflow-x: auto;">
+                    <table class="custom-table" id="tabla-paraderos">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Nombre Oficial</th>
+                                <th>Sentido</th>
+                                <th>Coordenadas GPS</th>
+                                <th>Voz Anuncio</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-paraderos">
+                            <!-- Inyectado por JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- SUB-TAB 4: FLOTA Y VEHÍCULOS -->
+        <section id="admin-sec-unidades" class="admin-section">
+            <div class="glass-card">
+                <div class="card-header-line">
+                    <div>
+                        <h2 class="card-title">🚍 Flota de Unidades Móviles</h2>
+                        <p class="card-subtitle">Gestión de códigos de bus, choferes y estado de transmisión GPS</p>
+                    </div>
+                    <button type="button" class="btn btn-cyan" onclick="abrirModalNuevaUnidad()">
+                        ➕ Registrar Unidad
+                    </button>
+                </div>
+
+                <div class="table-responsive" style="overflow-x: auto;">
+                    <table class="custom-table">
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Nombre / Conductor</th>
+                                <th>Sentido Asignado</th>
+                                <th>Última Velocidad</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-unidades">
+                            <!-- Inyectado por JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- SUB-TAB 5: VOZ Y SEGURIDAD INSTITUCIONAL -->
+        <section id="admin-sec-voz" class="admin-section">
+            <div class="glass-card">
+                <div class="card-header-line">
+                    <div>
+                        <h2 class="card-title">🔊 Estudio de Voz y Mensajes Institucionales</h2>
+                        <p class="card-subtitle">Configuración del motor de locución TTS y audios de seguridad del Corredor Cusco Anta</p>
+                    </div>
+                    <button type="button" class="btn btn-emerald" onclick="probarVozTextoDemo()">
+                        🎙️ Escuchar Prueba de Voz
+                    </button>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px;">
+                    <div>
+                        <div class="form-group">
+                            <label>Seleccionar Voz TTS en Español</label>
+                            <select id="admin-voice-select" class="form-input"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Velocidad de Habla: <span id="lbl-voice-rate">1.0x</span></label>
+                            <input type="range" id="input-voice-rate" min="0.6" max="1.4" step="0.1" value="1.0" class="form-input" oninput="document.getElementById('lbl-voice-rate').textContent=this.value+'x'">
+                        </div>
+                    </div>
+                    <div>
+                        <label style="font-size: 12px; font-weight: 700; color: #cbd5e1; text-transform: uppercase; margin-bottom: 8px; display: block;">
+                            🛡️ Mensajes de Seguridad Institucional (Corredor Cusco Anta)
+                        </label>
+                        <div id="mensajes-seguridad-admin-list" style="display: flex; flex-direction: column; gap: 8px;">
+                            <!-- Inyectados por JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ============================================== -->
+    <!-- VISTA 3: CONSOLA CHOFER (GPS 2D Y VOZ EN RUTA) -->
+    <!-- ============================================== -->
+    <main id="view-chofer" class="app-view">
+        <!-- Banner de Desbloqueo de Audio en Celular -->
+        <div class="audio-unlock-banner" id="banner-desbloqueo-audio" onclick="desbloquearAudioMovil()">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 22px;">🔊</span>
+                <div>
+                    <div>Toca aquí para Activar Audio GPS</div>
+                    <div style="font-size: 11px; opacity: 0.9;">Cantará automáticamente cada paradero a 120-150m</div>
+                </div>
+            </div>
+            <button type="button" class="btn btn-glass" style="font-size: 11px; padding: 4px 10px;">ACTIVAR</button>
+        </div>
+
+        <div class="chofer-map-viewport">
+            <div id="chofer-map"></div>
+
+            <!-- HUD Chofer Flotante Superior -->
+            <div class="chofer-hud-overlay">
+                <div class="hud-glass-pill">
+                    <div>
+                        <div style="font-size: 10px; color: #94a3b8; font-weight: 700;">UNIDAD</div>
+                        <strong id="hud-chofer-unidad-cod" style="font-size: 15px; color: white;">U-01</strong>
+                    </div>
+                    <span class="hud-lane-badge" id="hud-chofer-sentido-badge">⬇️ BAJADA</span>
+                </div>
+
+                <div class="hud-glass-pill">
+                    <div class="hud-speed-gauge" id="hud-chofer-velocidad">0</div>
+                    <span class="hud-speed-unit">KM/H</span>
+                </div>
+
+                <div class="hud-glass-pill" style="gap: 8px;">
+                    <button type="button" class="btn btn-cyan" onclick="toggleTarjetaControlChofer()" style="font-size: 12px; padding: 6px 12px;">
+                        📋 Hoja de Ruta (<span id="tc-count-paraderos">0</span>)
+                    </button>
+                    <button type="button" class="btn btn-emerald" onclick="centrarChoferEnGPS()" title="Centrar vehículo">
+                        📍 GPS
+                    </button>
+                    <button type="button" class="btn btn-glass" onclick="simularPasoParaderoChofer()" title="Probar audio paradero inmediato">
+                        🔔 Probar Voz
+                    </button>
+                </div>
+            </div>
+
+            <!-- Banner Alerta Paradero Entrante -->
+            <div class="stop-announcement-banner" id="banner-paradero-entrante" style="display: none;">
+                <div style="font-size: 32px;">🚏</div>
+                <div style="flex: 1;">
+                    <span style="font-size: 11px; font-weight: 800; color: #10b981; text-transform: uppercase; letter-spacing: 0.5px;">ENTRANDO AL PARADERO</span>
+                    <h3 id="banner-paradero-nombre" style="font-size: 17px; color: white; margin: 2px 0;">Pucyura Centro</h3>
+                    <p style="font-size: 12px; color: #94a3b8; margin: 0;" id="banner-paradero-dist">Aproximación a 140 metros</p>
+                </div>
+                <button type="button" class="btn btn-glass" onclick="document.getElementById('banner-paradero-entrante').style.display='none'">✕</button>
+            </div>
+        </div>
+
+        <!-- Modal Hoja de Ruta Chofer -->
+        <div class="chofer-modal-overlay" id="modal-tarjeta-chofer">
+            <div class="chofer-modal-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; margin-bottom: 14px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 22px;">📋</span>
+                        <div>
+                            <h3 style="font-size: 15px; color: white; margin: 0;">Hoja de Ruta - Tiempos de Paraderos</h3>
+                            <p style="font-size: 11px; color: #94a3b8; margin: 0;">Unidad <span id="tc-unit-lbl">U-01</span> | Sentido: <strong id="tc-carril-lbl" style="color: #38bdf8;">Bajada</strong></p>
+                        </div>
+                    </div>
+                    <button type="button" onclick="toggleTarjetaControlChofer()" style="background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer;">✕</button>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px;">
+                    <div style="background: rgba(255,255,255,0.04); padding: 8px; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 10px; color: #94a3b8;">TIEMPO TOTAL</div>
+                        <div style="font-size: 14px; font-weight: 700; color: #38bdf8;" id="tc-tiempo-viaje">00h 00m</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.04); padding: 8px; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 10px; color: #94a3b8;">PARADEROS REG.</div>
+                        <div style="font-size: 14px; font-weight: 700; color: #10b981;" id="tc-total-paraderos">0</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.04); padding: 8px; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 10px; color: #94a3b8;">VEL. ACTUAL</div>
+                        <div style="font-size: 14px; font-weight: 700; color: #fbbf24;" id="tc-vel-actual">0 km/h</div>
+                    </div>
+                </div>
+
+                <div id="tc-lista-paraderos-chofer" style="overflow-y: auto; flex: 1; max-height: 45vh; display: flex; flex-direction: column; gap: 6px;">
+                    <!-- Items inyectados -->
+                </div>
+
+                <div style="display: flex; gap: 8px; margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <button type="button" class="btn btn-cyan" style="flex: 1; padding: 10px;" onclick="reiniciarVueltaChoferCompleto()">
+                        🔄 Iniciar Nueva Vuelta
+                    </button>
+                    <button type="button" class="btn btn-glass" style="flex: 1; padding: 10px;" onclick="toggleTarjetaControlChofer()">
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ============================================== -->
+    <!-- JAVASCRIPT INTEGRAL Y COMPLETO                 -->
+    <!-- ============================================== -->
+    <script>
+        // ==============================================
+        // CONSTANTES OFICIALES Y DATOS MAESTROS
+        // ==============================================
+        const COORDENADAS_RUTA_PE3S = [
+            [-13.461830, -72.146064], // Terminal Terrestre Anta (Izcuchaca)
+            [-13.464500, -72.140200], // Plaza de Armas Izcuchaca
+            [-13.468200, -72.132500], // Pampa de Anta Cruce
+            [-13.475600, -72.112000], // Compone Entrada
+            [-13.488000, -72.083500], // Pucyura Centro
+            [-13.498500, -72.053000], // Cachimayo Cruce
+            [-13.504200, -72.031500], // Peaje Cachimayo / Sencca
+            [-13.509800, -72.016000], // Poroy Entrada
+            [-13.518800, -71.991000], // Tica Tica / Control
+            [-13.522000, -71.982500], // Arcopata
+            [-13.524200, -71.972000], // Av. Ejército
+            [-13.524800, -71.964000], // Av. Huayruropata con Garcilaso
+            [-13.525500, -71.958500]  // Cusco Huayruropata (Terminal Final)
+        ];
+
+        const PARADEROS_INICIALES = [
+            // --- CARRIL DE BAJADA (Anta ➔ Cusco) ---
+            { id: 'p_anta_b1', nombre: 'Terminal Terrestre Anta (Izcuchaca)', lat: -13.461830, lng: -72.146064, sentido: 'bajada', voiceType: 'speech' },
+            { id: 'p_anta_b2', nombre: 'Plaza de Armas Izcuchaca (Bajada)', lat: -13.464500, lng: -72.140200, sentido: 'bajada', voiceType: 'speech' },
+            { id: 'p_anta_b3', nombre: 'Pampa de Anta Cruce (Bajada)', lat: -13.468200, lng: -72.132500, sentido: 'bajada', voiceType: 'speech' },
+            { id: 'p_anta_b4', nombre: 'Compone Entrada (Bajada)', lat: -13.475600, lng: -72.112000, sentido: 'bajada', voiceType: 'speech' },
+            { id: 'p_anta_b5', nombre: 'Pucyura Centro (Bajada)', lat: -13.488000, lng: -72.083500, sentido: 'bajada', voiceType: 'speech' },
+            { id: 'p_anta_b6', nombre: 'Cachimayo Cruce (Bajada)', lat: -13.498500, lng: -72.053000, sentido: 'bajada', voiceType: 'speech' },
+            { id: 'p_anta_b7', nombre: 'Peaje Cachimayo / Sencca (Bajada)', lat: -13.504200, lng: -72.031500, sentido: 'bajada', voiceType: 'speech' },
+            { id: 'p_anta_b8', nombre: 'Poroy Entrada (Bajada)', lat: -13.509800, lng: -72.016000, sentido: 'bajada', voiceType: 'speech' },
+            { id: 'p_anta_b9', nombre: 'Tica Tica / Control (Bajada)', lat: -13.518800, lng: -71.991000, sentido: 'bajada', voiceType: 'speech' },
+            { id: 'p_anta_b10', nombre: 'Arcopata (Bajada)', lat: -13.522000, lng: -71.982500, sentido: 'bajada', voiceType: 'speech' },
+            { id: 'p_anta_b11', nombre: 'Av. Ejército (Bajada)', lat: -13.524200, lng: -71.972000, sentido: 'bajada', voiceType: 'speech' },
+            { id: 'p_anta_b12', nombre: 'Cusco - Huayruropata (Terminal Final)', lat: -13.525500, lng: -71.958500, sentido: 'bajada', voiceType: 'speech' },
+
+            // --- CARRIL DE SUBIDA (Cusco ➔ Anta) ---
+            { id: 'p_anta_s1', nombre: 'Cusco - Huayruropata (Inicio Subida)', lat: -13.525500, lng: -71.958500, sentido: 'subida', voiceType: 'speech' },
+            { id: 'p_anta_s2', nombre: 'Av. Huayruropata / Garcilaso', lat: -13.524800, lng: -71.964000, sentido: 'subida', voiceType: 'speech' },
+            { id: 'p_anta_s3', nombre: 'Av. Ejército / Pera (Subida)', lat: -13.523900, lng: -71.971800, sentido: 'subida', voiceType: 'speech' },
+            { id: 'p_anta_s4', nombre: 'Arcopata (Subida)', lat: -13.521800, lng: -71.982800, sentido: 'subida', voiceType: 'speech' },
+            { id: 'p_anta_s5', nombre: 'Tica Tica / Curva (Subida)', lat: -13.518500, lng: -71.991500, sentido: 'subida', voiceType: 'speech' },
+            { id: 'p_anta_s6', nombre: 'Poroy (Subida)', lat: -13.509500, lng: -72.016500, sentido: 'subida', voiceType: 'speech' },
+            { id: 'p_anta_s7', nombre: 'Cachimayo Cruce (Subida)', lat: -13.498200, lng: -72.053200, sentido: 'subida', voiceType: 'speech' },
+            { id: 'p_anta_s8', nombre: 'Pucyura (Subida)', lat: -13.487800, lng: -72.083800, sentido: 'subida', voiceType: 'speech' },
+            { id: 'p_anta_s9', nombre: 'Compone Entrada (Subida)', lat: -13.475400, lng: -72.112300, sentido: 'subida', voiceType: 'speech' },
+            { id: 'p_anta_s10', nombre: 'Pampa de Anta (Subida)', lat: -13.468000, lng: -72.132800, sentido: 'subida', voiceType: 'speech' },
+            { id: 'p_anta_s11', nombre: 'Izcuchaca Centro (Subida)', lat: -13.464200, lng: -72.140500, sentido: 'subida', voiceType: 'speech' },
+            { id: 'p_anta_s12', nombre: 'Terminal Terrestre Anta (Final Subida)', lat: -13.461830, lng: -72.146064, sentido: 'subida', voiceType: 'speech' }
+        ];
+
+        const MENSAJES_SEGURIDAD = [
+            "Estimados pasajeros, bienvenidos a bordo. Por motivos de seguridad, les pedimos mantener sus objetos de valor siempre a la vista y guardar bien sus pertenencias personales durante el trayecto. Corredor Cusco Anta les da las gracias por su preferencia. Que tengan un excelente viaje.",
+            "Señores pasajeros, su seguridad y tranquilidad son nuestra prioridad. Por favor, aseguren su equipaje de mano y no pierdan de vista sus objetos de valor durante todo el recorrido. La familia de Corredor Cusco Anta les agradece su preferencia y les desea un trayecto placentero.",
+            "Atención, por favor. A todos nuestros estimados pasajeros, les recordamos que para disfrutar de un viaje tranquilo, es importante cuidar y asegurar muy bien todas sus pertenencias. La empresa Corredor Cusco Anta agradece profundamente su confianza y preferencia. Relájense y disfruten del recorrido con nosotros."
+        ];
+
+        // ==============================================
+        // ESTADO GLOBAL Y PERSISTENCIA
+        // ==============================================
+        let vistaActual = 'login'; // 'login', 'admin', 'chofer'
+        let rolAutenticado = null; // 'admin', 'chofer'
+        let unidadChoferActual = { codigo: 'U-01', nombre: 'Bus 01', carril: 'bajada' };
+
+        let paraderosData = [];
+        let unidadesData = [
+            { codigo: 'U-01', nombre: 'Bus 01 - Anta Express', carril: 'bajada', velocidad: 0, lat: -13.461830, lng: -72.146064 },
+            { codigo: 'U-02', nombre: 'Bus 02 - Veloz de los Andes', carril: 'subida', velocidad: 0, lat: -13.525500, lng: -71.958500 }
+        ];
+        let viajesHistorial = [];
+
+        // Conexión Socket.IO con tolerancia
+        let socket = null;
+        try {
+            if (typeof io !== 'undefined') {
+                socket = io({ reconnectionAttempts: 5, timeout: 3000 });
+                socket.on('connect', () => {
+                    document.getElementById('global-status-text').textContent = 'Conectado en Vivo ⚡';
+                    document.getElementById('global-status-indicator').style.background = 'rgba(16,185,129,0.2)';
+                });
+                socket.on('disconnect', () => {
+                    document.getElementById('global-status-text').textContent = 'Modo Local / Standalone';
+                });
+            }
+        } catch(e) {
+            console.log('Modo standalone activo.');
+        }
+
+        // Cargar Paraderos desde LocalStorage o Valores Iniciales
+        try {
+            const guardados = localStorage.getItem('paraderos_sami_orlando');
+            if (guardados) {
+                paraderosData = JSON.parse(guardados);
+            } else {
+                paraderosData = [...PARADEROS_INICIALES];
+                localStorage.setItem('paraderos_sami_orlando', JSON.stringify(paraderosData));
+            }
+        } catch(e) {
+            paraderosData = [...PARADEROS_INICIALES];
+        }
+
+        // Cargar Viajes Históricos
+        try {
+            const hGuardado = localStorage.getItem('viajes_sami_orlando');
+            if (hGuardado) viajesHistorial = JSON.parse(hGuardado);
+        } catch(e) {}
+
+        // ==============================================
+        // NAVEGACIÓN Y CAMBIO DE VISTAS
+        // ==============================================
+        function cambiarVistaGlobal(vista) {
+            vistaActual = vista;
+            document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active-view'));
+            document.querySelectorAll('.switch-btn').forEach(b => b.classList.remove('active'));
+
+            const targetView = document.getElementById('view-' + vista);
+            const targetBtn = document.getElementById('btn-view-' + vista);
+
+            if (targetView) targetView.classList.add('active-view');
+            if (targetBtn) targetBtn.classList.add('active');
+
+            if (vista === 'admin') {
+                setTimeout(() => {
+                    initAdminMap();
+                    renderizarTablaParaderosAdmin();
+                    renderizarTablaUnidadesAdmin();
+                    renderizarHistorialAdmin();
+                    cargarVocesAdmin();
+                }, 100);
+            } else if (vista === 'chofer') {
+                setTimeout(() => {
+                    initChoferMap();
+                    actualizarTarjetaControlUI();
+                }, 100);
+            }
+        }
+
+        function seleccionarRolLogin(rol) {
+            const btnAdmin = document.getElementById('tab-btn-admin-role');
+            const btnChofer = document.getElementById('tab-btn-chofer-role');
+            const formAdmin = document.getElementById('form-login-admin');
+            const formChofer = document.getElementById('form-login-chofer');
+
+            if (rol === 'admin') {
+                btnAdmin.classList.add('active');
+                btnChofer.classList.remove('active');
+                formAdmin.style.display = 'block';
+                formChofer.style.display = 'none';
+            } else {
+                btnChofer.classList.add('active');
+                btnAdmin.classList.remove('active');
+                formChofer.style.display = 'block';
+                formAdmin.style.display = 'none';
+            }
+        }
+
+        function procesarLoginAdmin(e) {
+            e.preventDefault();
+            const u = document.getElementById('admin-user-input').value.trim();
+            const p = document.getElementById('admin-pass-input').value.trim();
+
+            if (u === 'admin' && p === 'admin123') {
+                rolAutenticado = 'admin';
+                mostrarToast('✅ Bienvenido Administrador a Sami Orlando');
+                cambiarVistaGlobal('admin');
+            } else {
+                mostrarToast('❌ Usuario o contraseña incorrectos');
+            }
+        }
+
+        function procesarLoginChofer(e) {
+            e.preventDefault();
+            const cod = document.getElementById('chofer-codigo-input').value.trim().toUpperCase();
+            const carril = document.getElementById('chofer-sentido-input').value;
+
+            if (!cod) {
+                mostrarToast('❌ Ingrese el código de unidad');
+                return;
+            }
+
+            unidadChoferActual.codigo = cod;
+            unidadChoferActual.carril = carril;
+            unidadChoferActual.nombre = 'Unidad ' + cod;
+
+            document.getElementById('hud-chofer-unidad-cod').textContent = cod;
+            document.getElementById('hud-chofer-sentido-badge').textContent = carril === 'bajada' ? '⬇️ BAJADA' : '⬆️ SUBIDA';
+            document.getElementById('tc-unit-lbl').textContent = cod;
+            document.getElementById('tc-carril-lbl').textContent = carril === 'bajada' ? 'Bajada (Anta ➔ Cusco)' : 'Subida (Cusco ➔ Anta)';
+
+            rolAutenticado = 'chofer';
+            mostrarToast('🚍 Unidad ' + cod + ' en ruta. ¡Buen viaje!');
+            cambiarVistaGlobal('chofer');
+        }
+
+        function togglePantallaCompleta() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        }
+
+        function mostrarToast(mensaje) {
+            const t = document.getElementById('toast-notif');
+            if (!t) return;
+            t.textContent = mensaje;
+            t.style.display = 'block';
+            setTimeout(() => { t.style.display = 'none'; }, 3500);
+        }
+
+        // Distancia Haversine (metros)
+        function haversineMetros(lat1, lon1, lat2, lon2) {
+            const R = 6371000;
+            const toRad = (x) => (x * Math.PI) / 180;
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
+        // Rumbo GPS (0 a 360 grados)
+        function calcularRumboGPS(lat1, lon1, lat2, lon2) {
+            const toRad = (x) => (x * Math.PI) / 180;
+            const toDeg = (x) => (x * 180) / Math.PI;
+            const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+            const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+                      Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+            return (toDeg(Math.atan2(y, x)) + 360) % 360;
+        }
+
+        // ==============================================
+        // LÓGICA DE MAPA 2D ADMINISTRADOR
+        // ==============================================
+        let adminMap = null;
+        let adminMarkersParaderos = [];
+        let adminMarkerBus = null;
+
+        function initAdminMap() {
+            if (adminMap) {
+                adminMap.invalidateSize();
+                return;
+            }
+            const el = document.getElementById('admin-map');
+            if (!el) return;
+
+            adminMap = L.map('admin-map', { center: [-13.4936, -72.0522], zoom: 12 });
+
+            L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                subdomains: ['0', '1', '2', '3'],
+                attribution: '&copy; Google Earth HD'
+            }).addTo(adminMap);
+
+            // Trazo oficial de la carretera PE-3S
+            L.polyline(COORDENADAS_RUTA_PE3S, {
+                color: '#06b6d4',
+                weight: 8,
+                opacity: 0.4
+            }).addTo(adminMap);
+
+            L.polyline(COORDENADAS_RUTA_PE3S, {
+                color: '#38bdf8',
+                weight: 4,
+                opacity: 0.95
+            }).addTo(adminMap);
+
+            cargarParaderosEnMapaAdmin();
+            centrarMapaAdminRuta();
+        }
+
+        function centrarMapaAdminRuta() {
+            if (!adminMap) return;
+            adminMap.fitBounds(L.latLngBounds(COORDENADAS_RUTA_PE3S), { padding: [40, 40] });
+        }
+
+        function cargarParaderosEnMapaAdmin() {
+            if (!adminMap) return;
+            adminMarkersParaderos.forEach(m => adminMap.removeLayer(m));
+            adminMarkersParaderos = [];
+
+            paraderosData.forEach((p, idx) => {
+                const isBajada = p.sentido === 'bajada';
+                const bg = isBajada ? '#f59e0b' : '#38bdf8';
+                const icon = L.divIcon({
+                    className: 'stop-pin-admin',
+                    html: `<div style="background:${bg}; border:2px solid white; border-radius:50%; width:26px; height:26px; display:flex; align-items:center; justify-content:center; color:white; font-size:11px; font-weight:800; box-shadow:0 0 10px ${bg};">${idx+1}</div>`,
+                    iconSize: [26, 26],
+                    iconAnchor: [13, 13]
+                });
+
+                const m = L.marker([parseFloat(p.lat), parseFloat(p.lng)], { icon }).addTo(adminMap);
+                m.bindTooltip(p.nombre, { permanent: true, direction: 'top', className: 'stop-label' });
+                m.bindPopup(`
+                    <strong>🚏 ${p.nombre}</strong><br>
+                    <span style="color:#94a3b8; font-size:11px;">Sentido: ${isBajada ? 'Bajada (Anta ➔ Cusco)' : 'Subida (Cusco ➔ Anta)'}</span><br>
+                    <button onclick="probarAudioParaderoDirecto('${p.nombre}')" style="margin-top:6px; padding:4px 8px; font-size:11px; background:#0284c7; color:white; border:none; border-radius:4px; cursor:pointer;">🔊 Probar Anuncio</button>
+                `);
+                adminMarkersParaderos.push(m);
+            });
+        }
+
+        function cambiarTabAdmin(tabName, evt) {
+            document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active-section'));
+
+            if (evt) evt.currentTarget.classList.add('active');
+            const targetSec = document.getElementById('admin-sec-' + tabName);
+            if (targetSec) targetSec.classList.add('active-section');
+
+            if (tabName === 'mapa' && adminMap) {
+                setTimeout(() => adminMap.invalidateSize(), 150);
+            }
+        }
+
+        // ==============================================
+        // LÓGICA DE HISTORIAL EN PANEL ADMINISTRADOR
+        // ==============================================
+        function renderizarHistorialAdmin() {
+            const cont = document.getElementById('historial-viajes-lista');
+            if (!cont) return;
+
+            const filtroUnidad = document.getElementById('filtro-historial-unidad')?.value || 'todos';
+            const filtroCarril = document.getElementById('filtro-historial-sentido')?.value || 'todos';
+
+            const filtrados = viajesHistorial.filter(v => {
+                const matchU = filtroUnidad === 'todos' || v.codigoUnidad === filtroUnidad;
+                const matchC = filtroCarril === 'todos' || v.carril === filtroCarril;
+                return matchU && matchC;
+            });
+
+            if (filtrados.length === 0) {
+                cont.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+                        <div style="font-size: 32px; margin-bottom: 8px;">📋</div>
+                        <strong>No hay recorridos registrados aún</strong>
+                        <p style="font-size: 12px; margin-top: 4px;">Cuando un vehículo circule por la ruta Cusco - Izcuchaca - Anta y cruce los paraderos, se creará su tarjeta de control aquí.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            cont.innerHTML = filtrados.map(v => {
+                const isBajada = v.carril === 'bajada';
+                return `
+                    <div class="glass-card" style="border-left: 4px solid ${isBajada ? '#fbbf24' : '#38bdf8'}; padding: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+                            <div>
+                                <h3 style="font-size: 16px; color: white; margin: 0;">${v.nombreUnidad} <span style="color: #38bdf8;">[${v.codigoUnidad}]</span></h3>
+                                <span style="font-size: 12px; color: #94a3b8;">📅 ${new Date(v.horaInicio).toLocaleString()} | ${isBajada ? '⬇️ Bajada (Anta ➔ Cusco)' : '⬆️ Subida (Cusco ➔ Anta)'}</span>
+                            </div>
+                            <div style="display: flex; gap: 6px;">
+                                <button class="btn btn-emerald" onclick="imprimirTarjetaViaje('${v.id}')">🖨️ Imprimir Tarjeta</button>
+                                <button class="btn btn-rose" onclick="eliminarViaje('${v.id}')">🗑️</button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive" style="overflow-x: auto;">
+                            <table class="custom-table" style="font-size: 12px;">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Paradero Registrado</th>
+                                        <th>Hora Exacta</th>
+                                        <th>Tiempo Transcurrido</th>
+                                        <th>Velocidad</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${(v.paraderosRegistrados || []).map((p, i) => `
+                                        <tr>
+                                            <td>${i+1}</td>
+                                            <td><strong style="color:white;">🚏 ${p.paraderoNombre}</strong></td>
+                                            <td style="color:#38bdf8; font-family:monospace; font-weight:700;">🕒 ${p.hora}</td>
+                                            <td style="color:#34d399;">+${p.tiempoRelativoMin} min</td>
+                                            <td>${p.velocidad} km/h</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function imprimirTarjetaViaje(viajeId) {
+            const v = viajesHistorial.find(item => item.id === viajeId);
+            if (!v) return;
+            const w = window.open('', '_blank', 'width=800,height=600');
+            w.document.write(`
+                <html>
+                <head>
+                    <title>Tarjeta de Control - ${v.codigoUnidad}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 25px; }
+                        h1 { font-size: 18px; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 8px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
+                        th, td { border: 1px solid #999; padding: 6px 10px; text-align: left; }
+                        th { background: #eee; }
+                    </style>
+                </head>
+                <body>
+                    <button onclick="window.print()" style="float:right; padding:6px 12px; background:#0284c7; color:white; border:none; border-radius:4px; cursor:pointer;">🖨️ Imprimir</button>
+                    <h1>SAMI ORLANDO - CONTROL DE RUTA CUSCO ⇄ ANTA</h1>
+                    <p><strong>Unidad:</strong> ${v.codigoUnidad} - ${v.nombreUnidad} | <strong>Fecha:</strong> ${new Date(v.horaInicio).toLocaleString()}</p>
+                    <p><strong>Sentido:</strong> ${v.carril === 'bajada' ? 'Bajada (Anta ➔ Cusco)' : 'Subida (Cusco ➔ Anta)'}</p>
+                    <table>
+                        <thead>
+                            <tr><th>#</th><th>Paradero</th><th>Hora de Paso</th><th>Tiempo (+min)</th><th>Velocidad</th><th>Firma V°B°</th></tr>
+                        </thead>
+                        <tbody>
+                            ${(v.paraderosRegistrados || []).map((p, i) => `
+                                <tr><td>${i+1}</td><td>${p.paraderoNombre}</td><td>${p.hora}</td><td>+${p.tiempoRelativoMin}m</td><td>${p.velocidad} km/h</td><td></td></tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </body>
+                </html>
+            `);
+            w.document.close();
+        }
+
+        function eliminarViaje(id) {
+            if (!confirm('¿Eliminar este registro de viaje?')) return;
+            viajesHistorial = viajesHistorial.filter(v => v.id !== id);
+            localStorage.setItem('viajes_sami_orlando', JSON.stringify(viajesHistorial));
+            renderizarHistorialAdmin();
+            mostrarToast('🗑️ Registro eliminado');
+        }
+
+        function renderizarTablaParaderosAdmin() {
+            const tbody = document.getElementById('tbody-paraderos');
+            if (!tbody) return;
+            tbody.innerHTML = paraderosData.map((p, i) => `
+                <tr>
+                    <td>${i+1}</td>
+                    <td><strong style="color:white;">🚏 ${p.nombre}</strong></td>
+                    <td>${p.sentido === 'bajada' ? '<span class="status-pill-badge pill-amber">⬇️ Bajada</span>' : '<span class="status-pill-badge pill-cyan">⬆️ Subida</span>'}</td>
+                    <td style="font-family:monospace; font-size:11px;">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</td>
+                    <td>Web Speech</td>
+                    <td>
+                        <button class="btn btn-cyan" onclick="probarAudioParaderoDirecto('${p.nombre}')">🔊 Probar</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderizarTablaUnidadesAdmin() {
+            const tbody = document.getElementById('tbody-unidades');
+            if (!tbody) return;
+            tbody.innerHTML = unidadesData.map(u => `
+                <tr>
+                    <td><strong style="color:#38bdf8; font-family:monospace;">${u.codigo}</strong></td>
+                    <td>${u.nombre}</td>
+                    <td>${u.carril === 'bajada' ? '⬇️ Bajada' : '⬆️ Subida'}</td>
+                    <td>${u.velocidad || 0} km/h</td>
+                    <td><span class="status-pill-badge pill-emerald">🟢 Activa</span></td>
+                    <td>
+                        <button class="btn btn-glass" onclick="seleccionarUnidadChoferDirecto('${u.codigo}', '${u.carril}')">📱 Conectar</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function seleccionarUnidadChoferDirecto(cod, carril) {
+            unidadChoferActual.codigo = cod;
+            unidadChoferActual.carril = carril;
+            unidadChoferActual.nombre = 'Unidad ' + cod;
+            document.getElementById('hud-chofer-unidad-cod').textContent = cod;
+            document.getElementById('hud-chofer-sentido-badge').textContent = carril === 'bajada' ? '⬇️ BAJADA' : '⬆️ SUBIDA';
+            cambiarVistaGlobal('chofer');
+        }
+
+        // ==============================================
+        // LÓGICA DE CONSOLA CHOFER (GPS 2D Y VOZ)
+        // ==============================================
+        let choferMap = null;
+        let choferMarkerBus = null;
+        let choferMarkersParaderos = [];
+        let anunciadosSet = new Set();
+        let tiempoInicioVuelta = Date.now();
+        let registrosParaderosVuelta = [];
+        let audioDesbloqueado = false;
+        let watchIdGPS = null;
+
+        function initChoferMap() {
+            if (choferMap) {
+                choferMap.invalidateSize();
+                return;
+            }
+            const el = document.getElementById('chofer-map');
+            if (!el) return;
+
+            choferMap = L.map('chofer-map', { center: [-13.461830, -72.146064], zoom: 16 });
+
+            L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                subdomains: ['0', '1', '2', '3'],
+                attribution: '&copy; Google Maps'
+            }).addTo(choferMap);
+
+            L.polyline(COORDENADAS_RUTA_PE3S, {
+                color: '#38bdf8',
+                weight: 5,
+                opacity: 0.95
+            }).addTo(choferMap);
+
+            // Marcador de la unidad del chofer
+            const busIcon = L.divIcon({
+                className: 'bus-marker-chofer',
+                html: '<div style="background:#10b981; border:2px solid white; border-radius:50%; width:36px; height:36px; display:flex; align-items:center; justify-content:center; font-size:20px; box-shadow:0 0 15px #10b981;">🚍</div>',
+                iconSize: [36, 36],
+                iconAnchor: [18, 18]
+            });
+            choferMarkerBus = L.marker([-13.461830, -72.146064], { icon: busIcon }).addTo(choferMap);
+
+            // Cargar paraderos en el mapa del chofer
+            paraderosData.forEach(p => {
+                const isBajada = p.sentido === 'bajada';
+                const bg = isBajada ? '#f59e0b' : '#0284c7';
+                const pin = L.divIcon({
+                    className: 'stop-pin-chofer',
+                    html: `<div style="background:${bg}; border:2px solid white; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; color:white; font-size:10px; font-weight:800; box-shadow:0 0 8px ${bg};">🚏</div>`,
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                });
+                const m = L.marker([parseFloat(p.lat), parseFloat(p.lng)], { icon: pin }).addTo(choferMap);
+                m.bindTooltip(p.nombre, { permanent: true, direction: 'top', className: 'stop-label' });
+                choferMarkersParaderos.push(m);
+            });
+
+            // Activar rastreo GPS real si está disponible
+            iniciarGPSChofer();
+        }
+
+        function iniciarGPSChofer() {
+            if (!('geolocation' in navigator)) return;
+            let ultimaPos = null;
+
+            watchIdGPS = navigator.geolocation.watchPosition(
+                (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    const speed = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
+
+                    document.getElementById('hud-chofer-velocidad').textContent = speed;
+                    document.getElementById('tc-vel-actual').textContent = speed + ' km/h';
+
+                    if (choferMarkerBus) choferMarkerBus.setLatLng([lat, lng]);
+                    if (choferMap) choferMap.setView([lat, lng], 17);
+
+                    // Detección automática de carril por rumbo GPS
+                    if (ultimaPos && speed >= 8) {
+                        const dist = haversineMetros(ultimaPos.lat, ultimaPos.lng, lat, lng);
+                        if (dist >= 10) {
+                            const rumbo = calcularRumboGPS(ultimaPos.lat, ultimaPos.lng, lat, lng);
+                            if (rumbo >= 40 && rumbo <= 170 && unidadChoferActual.carril !== 'bajada') {
+                                unidadChoferActual.carril = 'bajada';
+                                document.getElementById('hud-chofer-sentido-badge').textContent = '⬇️ BAJADA';
+                                mostrarToast('🔄 GPS detectó sentido: Bajada (Anta ➔ Cusco)');
+                            } else if (rumbo >= 220 && rumbo <= 350 && unidadChoferActual.carril !== 'subida') {
+                                unidadChoferActual.carril = 'subida';
+                                document.getElementById('hud-chofer-sentido-badge').textContent = '⬆️ SUBIDA';
+                                mostrarToast('🔄 GPS detectó sentido: Subida (Cusco ➔ Anta)');
+                            }
+                        }
+                    }
+                    ultimaPos = { lat, lng };
+
+                    // Verificar proximidad a paraderos (120 - 150m)
+                    verificarProximidadParaderosChofer(lat, lng, speed);
+                },
+                (err) => {
+                    console.warn('GPS advertencia:', err.message);
+                },
+                { enableHighAccuracy: true, timeout: 8000, maximumAge: 2000 }
+            );
+        }
+
+        function centrarChoferEnGPS() {
+            if (choferMarkerBus && choferMap) {
+                choferMap.setView(choferMarkerBus.getLatLng(), 17);
+            }
+        }
+
+        // ==============================================
+        // EVALUACIÓN DE PARADEROS Y VOZ AUTOMÁTICA
+        // ==============================================
+        function verificarProximidadParaderosChofer(lat, lng, velocidad) {
+            const radioAviso = velocidad > 35 ? 150 : 125;
+
+            paraderosData.forEach(p => {
+                // Filtro estricto por sentido
+                if (p.sentido !== unidadChoferActual.carril && p.sentido !== 'ambos') return;
+
+                const dist = haversineMetros(lat, lng, parseFloat(p.lat), parseFloat(p.lng));
+
+                if (dist <= radioAviso && !anunciadosSet.has(p.id)) {
+                    anunciadosSet.add(p.id);
+                    dispararAvisoParadero(p, dist, velocidad);
+                }
+
+                // Resetear si se aleja más de 220 metros
+                if (dist > 220 && anunciadosSet.has(p.id)) {
+                    anunciadosSet.delete(p.id);
+                }
+            });
+        }
+
+        function dispararAvisoParadero(p, dist, velocidad) {
+            // 1. Mostrar banner visual
+            const banner = document.getElementById('banner-paradero-entrante');
+            const bNom = document.getElementById('banner-paradero-nombre');
+            const bDist = document.getElementById('banner-paradero-dist');
+
+            if (bNom) bNom.textContent = p.nombre;
+            if (bDist) bDist.textContent = `Aproximación a ${Math.round(dist)} metros`;
+            if (banner) {
+                banner.style.display = 'flex';
+                setTimeout(() => { banner.style.display = 'none'; }, 10000);
+            }
+
+            // 2. Anunciar por voz TTS
+            locucionVocalParadero(p.nombre);
+
+            // 3. Registrar en historial de la vuelta
+            registrarParaderoEnHistorialLocal(p, velocidad);
+        }
+
+        function locucionVocalParadero(nombre) {
+            if (!('speechSynthesis' in window)) return;
+            try {
+                window.speechSynthesis.cancel();
+                const u = new SpeechSynthesisUtterance('Próximo paradero: ' + nombre);
+                u.lang = 'es-ES';
+                u.rate = 1.0;
+
+                // Al terminar de anunciar el paradero, recitar un mensaje de seguridad institucional
+                u.onend = () => {
+                    setTimeout(() => {
+                        locucionMensajeSeguridad();
+                    }, 600);
+                };
+
+                window.speechSynthesis.speak(u);
+            } catch(e) {}
+        }
+
+        function locucionMensajeSeguridad() {
+            if (!('speechSynthesis' in window)) return;
+            try {
+                const rnd = Math.floor(Math.random() * MENSAJES_SEGURIDAD.length);
+                const u = new SpeechSynthesisUtterance(MENSAJES_SEGURIDAD[rnd]);
+                u.lang = 'es-ES';
+                u.rate = 1.0;
+                window.speechSynthesis.speak(u);
+            } catch(e) {}
+        }
+
+        function probarAudioParaderoDirecto(nombre) {
+            desbloquearAudioMovil();
+            locucionVocalParadero(nombre);
+            mostrarToast('🔊 Locución: Próximo paradero ' + nombre);
+        }
+
+        function simularPasoParaderoChofer() {
+            desbloquearAudioMovil();
+            const paraderosFiltrados = paraderosData.filter(p => p.sentido === unidadChoferActual.carril);
+            const p = paraderosFiltrados[Math.floor(Math.random() * paraderosFiltrados.length)] || paraderosData[0];
+            dispararAvisoParadero(p, 135, 40);
+        }
+
+        function desbloquearAudioMovil() {
+            if (audioDesbloqueado) return;
+            audioDesbloqueado = true;
+            try {
+                window.speechSynthesis.resume();
+                const u = new SpeechSynthesisUtterance('Audio de paraderos activado.');
+                u.lang = 'es-ES';
+                window.speechSynthesis.speak(u);
+            } catch(e) {}
+            const b = document.getElementById('banner-desbloqueo-audio');
+            if (b) b.style.display = 'none';
+            mostrarToast('✅ Audio activado al 100%');
+        }
+
+        // ==============================================
+        // HISTORIAL LOCAL Y HOJA DE RUTA
+        // ==============================================
+        function registrarParaderoEnHistorialLocal(p, velocidad) {
+            const now = new Date();
+            const horaStr = now.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const tiempoMin = Math.floor((now.getTime() - tiempoInicioVuelta) / 60000);
+
+            const registro = {
+                paraderoId: p.id,
+                paraderoNombre: p.nombre,
+                hora: horaStr,
+                tiempoRelativoMin: tiempoMin,
+                velocidad: Math.round(velocidad || 0)
+            };
+
+            registrosParaderosVuelta.push(registro);
+            actualizarTarjetaControlUI();
+
+            // Guardar o actualizar en viajesHistorial
+            let viajeActivo = viajesHistorial.find(v => v.codigoUnidad === unidadChoferActual.codigo && v.estado === 'en_ruta');
+            if (!viajeActivo) {
+                viajeActivo = {
+                    id: 'viaje_' + Date.now(),
+                    codigoUnidad: unidadChoferActual.codigo,
+                    nombreUnidad: unidadChoferActual.nombre,
+                    carril: unidadChoferActual.carril,
+                    horaInicio: new Date().toISOString(),
+                    estado: 'en_ruta',
+                    paraderosRegistrados: []
+                };
+                viajesHistorial.unshift(viajeActivo);
+            }
+            viajeActivo.paraderosRegistrados.push(registro);
+            try {
+                localStorage.setItem('viajes_sami_orlando', JSON.stringify(viajesHistorial));
+            } catch(e) {}
+        }
+
+        function toggleTarjetaControlChofer() {
+            const m = document.getElementById('modal-tarjeta-chofer');
+            if (!m) return;
+            const open = m.style.display === 'flex';
+            m.style.display = open ? 'none' : 'flex';
+            if (!open) actualizarTarjetaControlUI();
+        }
+
+        function actualizarTarjetaControlUI() {
+            document.getElementById('tc-count-paraderos').textContent = registrosParaderosVuelta.length;
+            document.getElementById('tc-total-paraderos').textContent = registrosParaderosVuelta.length;
+
+            const now = new Date();
+            const mins = Math.floor((now.getTime() - tiempoInicioVuelta) / 60000);
+            const h = Math.floor(mins / 60);
+            const m = mins % 60;
+            document.getElementById('tc-tiempo-viaje').textContent = `${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m`;
+
+            const cont = document.getElementById('tc-lista-paraderos-chofer');
+            if (!cont) return;
+
+            if (registrosParaderosVuelta.length === 0) {
+                cont.innerHTML = '<div style="text-align:center; padding:20px; color:#94a3b8; font-size:12px;">Aún no se han registrado paraderos en esta vuelta.<br>Se registrarán automáticamente al aproximarse a 120-150m.</div>';
+            } else {
+                cont.innerHTML = registrosParaderosVuelta.map((item, i) => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.04); padding:8px 12px; border-radius:8px; font-size:12px;">
+                        <div>
+                            <strong style="color:white; display:block;">${i+1}. 🚏 ${item.paraderoNombre}</strong>
+                            <span style="font-size:10px; color:#94a3b8;">+${item.tiempoRelativoMin} min de viaje | ${item.velocidad} km/h</span>
+                        </div>
+                        <span style="color:#38bdf8; font-family:monospace; font-weight:700;">${item.hora}</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function reiniciarVueltaChoferCompleto() {
+            if (!confirm('¿Iniciar una nueva vuelta? Se reiniciará el cronómetro y la lista de paraderos registrados.')) return;
+            registrosParaderosVuelta = [];
+            anunciadosSet.clear();
+            tiempoInicioVuelta = Date.now();
+            actualizarTarjetaControlUI();
+            mostrarToast('🔄 Nueva vuelta iniciada correctamente');
+        }
+
+        // ==============================================
+        // SIMULADOR DE RUTA PARA PRUEBAS IN SITU
+        // ==============================================
+        let simuladorTimer = null;
+        function iniciarSimuladorFlota() {
+            if (simuladorTimer) {
+                clearInterval(simuladorTimer);
+                simuladorTimer = null;
+                mostrarToast('⏹️ Simulación detenida');
+                return;
+            }
+
+            let idx = 0;
+            mostrarToast('▶️ Simulando avance del bus de Anta a Cusco...');
+            simuladorTimer = setInterval(() => {
+                if (idx >= COORDENADAS_RUTA_PE3S.length) {
+                    clearInterval(simuladorTimer);
+                    simuladorTimer = null;
+                    mostrarToast('🏁 Simulación completada en Cusco');
+                    return;
+                }
+                const pt = COORDENADAS_RUTA_PE3S[idx];
+                const speed = 45;
+
+                // Mover marcador en mapa admin
+                if (!adminMarkerBus && adminMap) {
+                    const icon = L.divIcon({
+                        className: 'bus-sim',
+                        html: '<div style="background:#06b6d4; border:2px solid white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; font-size:18px; box-shadow:0 0 14px #06b6d4;">🚍</div>',
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 16]
+                    });
+                    adminMarkerBus = L.marker(pt, { icon }).addTo(adminMap);
+                } else if (adminMarkerBus) {
+                    adminMarkerBus.setLatLng(pt);
+                }
+
+                // Evaluar paraderos
+                verificarProximidadParaderosChofer(pt[0], pt[1], speed);
+
+                idx++;
+            }, 3000);
+        }
+
+        function cargarVocesAdmin() {
+            const sel = document.getElementById('admin-voice-select');
+            if (!sel || !('speechSynthesis' in window)) return;
+            const voces = window.speechSynthesis.getVoices();
+            sel.innerHTML = voces.map(v => `<option value="${v.name}">${v.name} (${v.lang})</option>`).join('');
+            if (voces.length === 0) {
+                sel.innerHTML = '<option value="">Voz Predeterminada del Sistema</option>';
+            }
+
+            const mList = document.getElementById('mensajes-seguridad-admin-list');
+            if (mList) {
+                mList.innerHTML = MENSAJES_SEGURIDAD.map((m, i) => `
+                    <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:10px; font-size:12px; color:#cbd5e1;">
+                        <strong style="color:#10b981; display:block; margin-bottom:4px;">Mensaje ${i+1}:</strong>
+                        "${m}"
+                    </div>
+                `).join('');
+            }
+        }
+
+        function probarVozTextoDemo() {
+            desbloquearAudioMovil();
+            locucionMensajeSeguridad();
+        }
+
+        // ==============================================
+        // INICIALIZACIÓN AL CARGAR PÁGINA
+        // ==============================================
+        window.addEventListener('load', () => {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.onvoiceschanged = cargarVocesAdmin;
+            }
+            // Iniciar en pantalla de Login
+            cambiarVistaGlobal('login');
+        });
+    </script>
+</body>
+</html>
